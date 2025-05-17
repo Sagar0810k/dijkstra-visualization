@@ -43,170 +43,238 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function calculateNodePositions() {
-    const padding = 50
-    const availableWidth = canvas.width - padding * 2
-    const availableHeight = canvas.height - padding * 2
-
-    // Calculate grid dimensions
-    const nodeCount = cityData.nodes.length
-    const cols = Math.ceil(Math.sqrt(nodeCount))
-    const rows = Math.ceil(nodeCount / cols)
-
-    const cellWidth = availableWidth / cols
-    const cellHeight = availableHeight / rows
-
-    cityData.nodes.forEach((node, index) => {
-      const col = index % cols
-      const row = Math.floor(index / cols)
-
-      const x = padding + col * cellWidth + cellWidth / 2
-      const y = padding + row * cellHeight + cellHeight / 2
-
-      nodePositions[node.id] = { x, y }
+  const padding = 80  // Increased padding from edges of canvas
+  const availableWidth = canvas.width - padding * 2
+  const availableHeight = canvas.height - padding * 2
+  
+  // Create completely random positions across the entire canvas
+  cityData.nodes.forEach((node) => {
+    // Generate random position within the available area
+    const x = padding + Math.random() * availableWidth
+    const y = padding + Math.random() * availableHeight
+    
+    nodePositions[node.id] = { x, y }
+  })
+  
+  // Run a simple force-directed algorithm to prevent nodes from overlapping too much
+  const iterations = 50
+  const minDistance = 100  // Minimum desired distance between nodes
+  
+  for (let i = 0; i < iterations; i++) {
+    const forces = {}
+    
+    // Initialize forces
+    cityData.nodes.forEach(node => {
+      forces[node.id] = { x: 0, y: 0 }
+    })
+    
+    // Calculate repulsive forces between all node pairs
+    for (let j = 0; j < cityData.nodes.length; j++) {
+      const nodeA = cityData.nodes[j]
+      const posA = nodePositions[nodeA.id]
+      
+      for (let k = j + 1; k < cityData.nodes.length; k++) {
+        const nodeB = cityData.nodes[k]
+        const posB = nodePositions[nodeB.id]
+        
+        const dx = posB.x - posA.x
+        const dy = posB.y - posA.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        if (distance < minDistance) {
+          // Calculate repulsive force (inverse square law)
+          const force = (minDistance - distance) / distance * 0.1
+          const fx = dx * force
+          const fy = dy * force
+          
+          // Apply force in opposite directions
+          forces[nodeA.id].x -= fx
+          forces[nodeA.id].y -= fy
+          forces[nodeB.id].x += fx
+          forces[nodeB.id].y += fy
+        }
+      }
+    }
+    
+    // Apply forces to node positions
+    cityData.nodes.forEach(node => {
+      const force = forces[node.id]
+      const pos = nodePositions[node.id]
+      
+      pos.x += force.x
+      pos.y += force.y
+      
+      // Keep nodes within bounds
+      pos.x = Math.max(padding, Math.min(canvas.width - padding, pos.x))
+      pos.y = Math.max(padding, Math.min(canvas.height - padding, pos.y))
     })
   }
+}
 
   function drawCityMap(nodes, edges, pathEdges) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  
+  // Draw edges first so they're behind nodes
+  edges.forEach((edge) => {
+    const start = nodePositions[edge.start]
+    const end = nodePositions[edge.end]
 
-    // Draw edges
-    edges.forEach((edge) => {
-      const start = nodePositions[edge.start]
-      const end = nodePositions[edge.end]
+    if (!start || !end) return
 
-      if (!start || !end) return
+    const isInPath = pathEdges.some(
+      (pathEdge) =>
+        (pathEdge.start === edge.start && pathEdge.end === edge.end) ||
+        (pathEdge.start === edge.end && pathEdge.end === edge.start),
+    )
 
-      const isInPath = pathEdges.some(
-        (pathEdge) =>
-          (pathEdge.start === edge.start && pathEdge.end === edge.end) ||
-          (pathEdge.start === edge.end && pathEdge.end === edge.start),
-      )
+    // Calculate edge direction vector
+    const dx = end.x - start.x
+    const dy = end.y - start.y
+    const length = Math.sqrt(dx * dx + dy * dy)
+    
+    // Normalized direction vector
+    const ndx = dx / length
+    const ndy = dy / length
+    
+    // Perpendicular vector for label offset
+    const perpX = -ndy
+    const perpY = ndx
+    
+    // Draw the edge
+    ctx.beginPath()
+    ctx.moveTo(start.x, start.y)
+    ctx.lineTo(end.x, end.y)
+    ctx.strokeStyle = isInPath ? "#f59e0b" : "#94a3b8"
+    ctx.lineWidth = isInPath ? 4 : 2
+    ctx.stroke()
 
+    // Calculate midpoint with small offset to prevent overlap
+    const midX = (start.x + end.x) / 2 + perpX * 10
+    const midY = (start.y + end.y) / 2 + perpY * 10
+
+    // Draw weight label with improved visibility
+    ctx.fillStyle = "white"
+    const weightText = edge.weight.toString()
+    const textWidth = ctx.measureText(weightText).width
+    
+    // Draw rounded rectangle background
+    const labelPadding = 6
+    const labelWidth = textWidth + labelPadding * 2
+    const labelHeight = 20
+    const cornerRadius = 10
+    
+    ctx.beginPath()
+    ctx.moveTo(midX - labelWidth/2 + cornerRadius, midY - labelHeight/2)
+    ctx.arcTo(midX + labelWidth/2, midY - labelHeight/2, midX + labelWidth/2, midY + labelHeight/2, cornerRadius)
+    ctx.arcTo(midX + labelWidth/2, midY + labelHeight/2, midX - labelWidth/2, midY + labelHeight/2, cornerRadius)
+    ctx.arcTo(midX - labelWidth/2, midY + labelHeight/2, midX - labelWidth/2, midY - labelHeight/2, cornerRadius)
+    ctx.arcTo(midX - labelWidth/2, midY - labelHeight/2, midX + labelWidth/2, midY - labelHeight/2, cornerRadius)
+    
+    // Add shadow for depth
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)'
+    ctx.shadowBlur = 3
+    ctx.shadowOffsetX = 1
+    ctx.shadowOffsetY = 1
+    
+    // Fill with solid color based on path status
+    ctx.fillStyle = isInPath ? "#fef3c7" : "white"
+    ctx.fill()
+    
+    // Add border
+    ctx.strokeStyle = isInPath ? "#f59e0b" : "#cbd5e1"
+    ctx.lineWidth = 1
+    ctx.stroke()
+    
+    // Clear shadow for text
+    ctx.shadowColor = 'transparent'
+    
+    // Draw the weight number
+    ctx.fillStyle = isInPath ? "#b45309" : "#475569"
+    ctx.font = "bold 12px Inter"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.fillText(edge.weight, midX, midY)
+  })
+
+  // Draw nodes
+  nodes.forEach((node) => {
+    const pos = nodePositions[node.id]
+    if (!pos) return
+
+    const isStart = selectedStart === node.id
+    const isEnd = selectedEnd === node.id
+    const isHovered = hoveredNode === node.id
+    const nodeSize = isHovered ? 24 : 22
+    
+    // Add shadow for depth
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)'
+    ctx.shadowBlur = 4
+    ctx.shadowOffsetX = 2
+    ctx.shadowOffsetY = 2
+
+    // Node background glow for selected nodes
+    if (isStart || isEnd || isHovered) {
       ctx.beginPath()
-      ctx.moveTo(start.x, start.y)
-      ctx.lineTo(end.x, end.y)
-      ctx.strokeStyle = isInPath ? "#f59e0b" : "#94a3b8"
-      ctx.lineWidth = isInPath ? 3 : 2
-      ctx.stroke()
-
-      // Draw weight
-      const midX = (start.x + end.x) / 2
-      const midY = (start.y + end.y) / 2
-
-      // Draw weight background
-      ctx.fillStyle = "white"
-      const weightText = edge.weight.toString()
-      const textMetrics = ctx.measureText(weightText)
-      const padding = 4
-      ctx.fillRect(
-        midX - textMetrics.width / 2 - padding,
-        midY - 8 - padding,
-        textMetrics.width + padding * 2,
-        16 + padding * 2,
-      )
-
-      ctx.fillStyle = isInPath ? "#b45309" : "#475569"
-      ctx.font = "bold 12px Inter"
-      ctx.textAlign = "center"
-      ctx.textBaseline = "middle"
-      ctx.fillText(edge.weight, midX, midY)
-    })
-
-    // Draw nodes
-    nodes.forEach((node) => {
-      const pos = nodePositions[node.id]
-      if (!pos) return
-
-      const isStart = selectedStart === node.id
-      const isEnd = selectedEnd === node.id
-      const isHovered = hoveredNode === node.id
-
-      // Node circle
-      ctx.beginPath()
-      ctx.arc(pos.x, pos.y, isHovered ? 22 : 20, 0, Math.PI * 2)
-
-      if (isStart) {
-        ctx.fillStyle = "#10b981" // Green for start
-      } else if (isEnd) {
-        ctx.fillStyle = "#f97316" // Orange for end
-      } else {
-        ctx.fillStyle = "#4f46e5" // Default blue
-      }
-
+      ctx.arc(pos.x, pos.y, nodeSize + 6, 0, Math.PI * 2)
+      ctx.fillStyle = isStart ? "rgba(16, 185, 129, 0.3)" : 
+                      isEnd ? "rgba(249, 115, 22, 0.3)" : 
+                      "rgba(79, 70, 229, 0.3)"
       ctx.fill()
+    }
+    
+    // Node circle with gradient
+    const gradient = ctx.createRadialGradient(
+      pos.x - nodeSize/3, pos.y - nodeSize/3, 0,
+      pos.x, pos.y, nodeSize
+    )
+    
+    if (isStart) {
+      gradient.addColorStop(0, "#34d399")
+      gradient.addColorStop(1, "#059669")
+    } else if (isEnd) {
+      gradient.addColorStop(0, "#fb923c")
+      gradient.addColorStop(1, "#ea580c")
+    } else {
+      gradient.addColorStop(0, "#818cf8")
+      gradient.addColorStop(1, "#4338ca")
+    }
 
-      if (isHovered) {
-        ctx.strokeStyle = "#0f172a"
-        ctx.lineWidth = 2
-        ctx.stroke()
-      }
-
-      // Node label
-      ctx.fillStyle = "white"
-      ctx.font = "bold 14px Inter"
-      ctx.textAlign = "center"
-      ctx.textBaseline = "middle"
-      ctx.fillText(node.id, pos.x, pos.y)
-
-      // Node name below
-      ctx.fillStyle = "#0f172a"
-      ctx.font = "12px Inter"
-      ctx.fillText(node.name || `Node ${node.id}`, pos.x, pos.y + 30)
-    })
-  }
-
-  function setupCanvasInteraction() {
-    canvas.addEventListener("mousemove", (event) => {
-      const rect = canvas.getBoundingClientRect()
-      const mouseX = event.clientX - rect.left
-      const mouseY = event.clientY - rect.top
-
-      // Check if mouse is over any node
-      let foundNode = null
-      cityData.nodes.forEach((node) => {
-        const pos = nodePositions[node.id]
-        if (!pos) return
-
-        const distance = Math.sqrt(Math.pow(mouseX - pos.x, 2) + Math.pow(mouseY - pos.y, 2))
-
-        if (distance <= 20) {
-          foundNode = node.id
-          canvas.style.cursor = "pointer"
-        }
-      })
-
-      if (foundNode !== hoveredNode) {
-        hoveredNode = foundNode
-        if (!foundNode) {
-          canvas.style.cursor = "default"
-        }
-        drawCityMap(cityData.nodes, cityData.edges, selectedPath)
-      }
-    })
-
-    canvas.addEventListener("click", (event) => {
-      if (hoveredNode !== null) {
-        if (selectedStart === null) {
-          selectedStart = hoveredNode
-          document.getElementById("start").value = hoveredNode
-        } else if (selectedEnd === null) {
-          selectedEnd = hoveredNode
-          document.getElementById("end").value = hoveredNode
-        } else {
-          // Reset and start over
-          selectedStart = hoveredNode
-          selectedEnd = null
-          selectedPath = []
-          document.getElementById("start").value = hoveredNode
-          document.getElementById("end").value = ""
-
-          // Hide result card when resetting
-          document.getElementById("resultCard").style.display = "none"
-        }
-        drawCityMap(cityData.nodes, cityData.edges, selectedPath)
-      }
-    })
-  }
+    ctx.beginPath()
+    ctx.arc(pos.x, pos.y, nodeSize, 0, Math.PI * 2)
+    ctx.fillStyle = gradient
+    ctx.fill()
+    
+    // Node border
+    if (isHovered) {
+      ctx.strokeStyle = "#ffffff"
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
+    
+    // Remove shadow for text
+    ctx.shadowColor = 'transparent'
+    
+    // Node ID label
+    ctx.fillStyle = "white"
+    ctx.font = "bold 14px Inter"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.fillText(node.id, pos.x, pos.y)
+    
+    // Node name with background for better readability
+    const nodeName = node.name || `Node ${node.id}`
+    const nameWidth = ctx.measureText(nodeName).width
+    
+    // Add background for name
+    ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
+    ctx.fillRect(pos.x - nameWidth/2 - 4, pos.y + 20, nameWidth + 8, 18)
+    
+    // Draw name
+    ctx.fillStyle = "#0f172a"
+    ctx.font = "bold 12px Inter"
+    ctx.fillText(nodeName, pos.x, pos.y + 29)
+  })
+}
 
   // Form submission
   document.getElementById("shortestPathForm").addEventListener("submit", async function (event) {
@@ -316,4 +384,3 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initialize
   await fetchCityData()
 })
-

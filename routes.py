@@ -18,4 +18,3 @@ def get_city_data():
     except Exception as e:
         logger.error(f"Error in get_city_data: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
