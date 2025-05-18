@@ -10,4 +10,5 @@ class Edge(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     start = db.Column(db.Integer, db.ForeignKey('node.id'), nullable=False)
     end = db.Column(db.Integer, db.ForeignKey('node.id'), nullable=False)
-    weight = db.Column(db.Integer, nullable=False)
+    weight = db.Column(db.Integer, nullable=False)  # This will represent the distance
+    traffic = db.Column(db.Float, nullable=False, default=1.0)

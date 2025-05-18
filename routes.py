@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, current_app, request
 from models import db, Node, Edge 
 import logging
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,8 @@ def get_city_data():
     try:
         with current_app.app_context():
             nodes = [{"id": node.id, "name": node.name} for node in db.session.execute(db.select(Node)).scalars()]
-            edges = [{"start": edge.start, "end": edge.end, "weight": edge.weight} for edge in db.session.execute(db.select(Edge)).scalars()]
+            edges = [{"start": edge.start, "end": edge.end, "weight": edge.weight, "traffic": edge.traffic} 
+                    for edge in db.session.execute(db.select(Edge)).scalars()]
         
         logger.debug(f"Returning {len(nodes)} nodes and {len(edges)} edges")
         return jsonify({"nodes": nodes, "edges": edges})
